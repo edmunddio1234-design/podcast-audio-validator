@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Podcast Audio Validator — Mission Metrics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1B2A4A;--green:#10B981;--green2:#0D9373;--teal:#0B7A60;
+  --bg:#F0F5F3;--card:#FFFFFF;--card2:#F7FAF9;--hover:#E8F0ED;
+  --text:#1B2A4A;--text2:#374151;--muted:#6B7280;
+  --red:#EF4444;--amber:#F59E0B;--border:#E5E7EB;
+  --radius:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+.header{background:linear-gradient(135deg,#1B2A4A 0%,#243B60 100%);padding:20px 32px;display:flex;align-items:center;gap:14px}
+.header .logo{width:42px;height:42px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.header .logo svg{width:24px;height:24px;fill:#fff}
+.header h1{color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px}
+.header h1 span{color:var(--green)}
+.header p{color:rgba(255,255,255,.7);font-size:12px;margin-top:1px}
+
+.wrap{max-width:880px;margin:0 auto;padding:28px 16px 60px}
+
+/* ── Steps ── */
+.steps{display:flex;gap:6px;margin-bottom:28px}
+.step{flex:1;text-align:center;padding:10px 4px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;color:var(--muted);transition:.2s}
+.step .n{display:block;font-size:15px;font-weight:800;margin-bottom:1px}
+.step.active{background:var(--green);color:#fff;border-color:var(--green)}
+.step.done{background:#D1FAE5;color:var(--teal);border-color:#A7F3D0}
+
+/* ── Card ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:18px}
+.card h2{font-size:17px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+/* ── Upload ── */
+.drop{border:2px dashed var(--border);border-radius:var(--radius);padding:52px 20px;text-align:center;cursor:pointer;transition:.25s}
+.drop:hover,.drop.over{border-color:var(--green);background:rgba(16,185,129,.04)}
+.drop svg{width:44px;height:44px;fill:var(--muted);margin-bottom:10px}
+.drop p{font-size:14px;color:var(--text2)}
+.drop .hint{font-size:12px;color:var(--muted);margin-top:6px}
+.drop input{display:none}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+.btn-g{background:var(--green);color:#fff}.btn-g:hover{background:var(--green2)}
+.btn-g:disabled{opacity:.45;cursor:not-allowed}
+.btn-o{background:var(--card2);color:var(--text);border:1px solid var(--border)}.btn-o:hover{background:var(--hover)}
+.btn-dl{background:linear-gradient(135deg,var(--green2),var(--green));color:#fff;font-size:15px;padding:12px 28px}
+.btn-dl:hover{opacity:.9}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+
+/* ── Workflow pills ── */
+.wf-row{display:flex;gap:10px;margin-bottom:16px}
+.wf-pill{flex:1;padding:14px;background:var(--card2);border:2px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:center;transition:.2s}
+.wf-pill:hover{border-color:var(--green)}
+.wf-pill.sel{border-color:var(--green);background:rgba(16,185,129,.06)}
+.wf-pill h3{font-size:13px;font-weight:700;margin-bottom:2px}.wf-pill p{font-size:11px;color:var(--muted)}
+
+/* ── Stats grid ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.stat{background:var(--card2);border-radius:8px;padding:12px 14px}
+.stat .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.stat .val{font-size:17px;font-weight:700;margin-top:3px}
+
+/* ── Validation rows ── */
+.vr{padding:11px 14px;border-radius:8px;margin-bottom:6px;display:flex;gap:10px;align-items:flex-start}
+.vr.pass{background:#D1FAE5;border-left:3px solid var(--green)}
+.vr.warning{background:#FEF3C7;border-left:3px solid var(--amber)}
+.vr.fail{background:#FEE2E2;border-left:3px solid var(--red)}
+.vr .ico{font-size:16px;flex-shrink:0;margin-top:1px}
+.vr .cat{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)}
+.vr .msg{font-size:13px;margin-top:1px;color:var(--text2)}
+.vr .fix{font-size:12px;color:var(--green2);margin-top:3px}
+
+/* ── Status banner ── */
+.banner{padding:14px 18px;border-radius:var(--radius);text-align:center;font-weight:700;font-size:15px;margin-bottom:16px}
+.banner.pass{background:#D1FAE5;color:var(--teal);border:1px solid #A7F3D0}
+.banner.warning{background:#FEF3C7;color:#92400E;border:1px solid #FDE68A}
+.banner.fail{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA}
+.banner .sub{font-size:12px;font-weight:500;margin-top:3px}
+
+/* ── Export form ── */
+.eg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ef label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.ef select,.ef input[type=text]{width:100%;padding:8px 10px;background:var(--card2);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;color:var(--text)}
+.ef select:focus,.ef input:focus{outline:none;border-color:var(--green)}
+.chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px}
+.chk input{width:18px;height:18px;accent-color:var(--green)}
+
+/* ── Download ── */
+.dl-card{background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(27,42,74,.06));border:1px solid rgba(16,185,129,.25);border-radius:var(--radius);padding:28px;text-align:center}
+.dl-card h3{font-size:18px;font-weight:700;margin-bottom:6px}
+.dl-card .inf{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+/* ── Loading ── */
+.loading{text-align:center;padding:44px}
+.spin{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 10px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading p{font-size:13px;color:var(--muted)}
+
+.hidden{display:none!important}
+.footer{text-align:center;padding:20px;font-size:11px;color:var(--muted)}
+.footer span{color:var(--green);font-weight:600}
+
+@media(max-width:600px){.eg{grid-template-columns:1fr}.wf-row{flex-direction:column}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3z"/></svg></div>
+  <div>
+    <h1>Podcast Audio <span>Validator</span></h1>
+    <p>Apple Podcasts compliance checker &amp; converter</p>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="steps">
+    <div class="step active" id="s1"><span class="n">1</span>Upload</div>
+    <div class="step" id="s2"><span class="n">2</span>Analyze</div>
+    <div class="step" id="s3"><span class="n">3</span>Validate</div>
+    <div class="step" id="s4"><span class="n">4</span>Export</div>
+    <div class="step" id="s5"><span class="n">5</span>Download</div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div id="sec-upload">
+    <div class="card">
+      <h2><span class="dot"></span>Upload Your Podcast Audio</h2>
+      <div class="drop" id="drop">
+        <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+        <p><strong>Click to browse or drag a file here</strong></p>
+        <p class="hint">WAV · FLAC · MP3 · M4A · AAC · OGG — up to 500 MB</p>
+        <input type="file" id="fileIn" accept="audio/*,.wav,.flac,.mp3,.m4a,.aac,.ogg,.wma">
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="sec-load" class="hidden">
+    <div class="card"><div class="loading"><div class="spin"></div><p id="loadTxt">Analyzing your audio…</p></div></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="sec-results" class="hidden">
+    <div class="card">
+      <h2><span class="dot"></span>Audio Analysis</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px" id="fileName"></p>
+      <div class="stats" id="statsGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot"></span>Select Your Workflow</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Choose how you plan to publish this episode:</p>
+      <div class="wf-row">
+        <div class="wf-pill sel" data-wf="connect" onclick="pickWf('connect')"><h3>Apple Podcasts Connect</h3><p>Subscriber upload · WAV / FLAC / MP3</p></div>
+        <div class="wf-pill" data-wf="rss" onclick="pickWf('rss')"><h3>RSS Feed</h3><p>Feed distribution · MP3 / AAC</p></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot"></span>Compliance Report</h2>
+      <div id="banner" class="banner"></div>
+      <div id="valList"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="dot"></span>Fix &amp; Export Settings</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Recommended settings are pre-selected. Adjust if needed.</p>
+      <div class="eg">
+        <div class="ef"><label>Format</label><select id="xFmt" onchange="fmtChanged()"><option value="wav">WAV (Lossless)</option><option value="flac">FLAC (Lossless)</option><option value="mp3">MP3</option><option value="aac">AAC (M4A)</option></select></div>
+        <div class="ef"><label>Sample Rate</label><select id="xSr"><option value="44100">44.1 kHz</option><option value="48000">48 kHz</option></select></div>
+        <div class="ef" id="bdWrap"><label>Bit Depth</label><select id="xBd"><option value="24">24-bit (Recommended)</option><option value="16">16-bit</option></select></div>
+        <div class="ef" id="brWrap"><label>Bitrate</label><select id="xBr"><option value="96">96 kbps</option><option value="128" selected>128 kbps</option><option value="192">192 kbps</option><option value="256">256 kbps</option><option value="320">320 kbps</option></select></div>
+        <div class="ef"><label>Channels</label><select id="xCh"><option value="2">Stereo</option><option value="1">Mono</option></select></div>
+      </div>
+      <div class="chk"><input type="checkbox" id="xNorm" checked><label for="xNorm">Normalize loudness to -16 LUFS &amp; limit true peak to -1 dBFS</label></div>
+      <div class="btns">
+        <button class="btn btn-g" id="goBtn" onclick="doConvert()">Convert &amp; Export</button>
+        <button class="btn btn-o" onclick="reset()">Start Over</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOWNLOAD -->
+  <div id="sec-dl" class="hidden">
+    <div class="card">
+      <h2><span class="dot"></span>Final Compliance Check</h2>
+      <div id="dlBanner" class="banner"></div>
+      <div id="dlVal"></div>
+    </div>
+    <div class="dl-card">
+      <h3 id="dlName"></h3>
+      <p class="inf" id="dlInfo"></p>
+      <a id="dlLink" class="btn btn-dl" download>Download Compliant File</a>
+    </div>
+    <div class="btns" style="justify-content:center;margin-top:18px">
+      <button class="btn btn-o" onclick="reset()">Process Another File</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Powered by <span>Mission Metrics</span></div>
+
+<script>
+let DATA=null, WF="connect", STORED="";
+
+const drop=document.getElementById("drop"), fileIn=document.getElementById("fileIn");
+drop.onclick=()=>fileIn.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
+drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files.length)go(e.dataTransfer.files[0])};
+fileIn.onchange=()=>{if(fileIn.files.length)go(fileIn.files[0])};
+
+async function go(file){
+  show("load");step(2);
+  document.getElementById("loadTxt").textContent=`Analyzing ${file.name}… measuring loudness…`;
+  const fd=new FormData();fd.append("audio",file);
+  try{
+    const r=await fetch("/api/analyze",{method:"POST",body:fd});
+    if(!r.ok)throw new Error((await r.json()).error||"Upload failed");
+    DATA=await r.json();DATA.info.originalName=file.name;STORED=DATA.info.storedName;
+    showResults();
+  }catch(e){alert("Error: "+e.message);show("upload");step(1)}
+}
+
+function showResults(){
+  show("results");step(3);
+  const i=DATA.info,l=DATA.loudness;
+  document.getElementById("fileName").textContent=`${i.originalName} — ${i.fileSizeFmt} — ${i.durationFmt}`;
+  document.getElementById("statsGrid").innerHTML=[
+    S("Format",`.${(i.ext||i.codec).toUpperCase()}`),S("Codec",i.codec),
+    S("Channels",i.channels===1?"Mono":"Stereo"),S("Sample Rate",i.sampleRateKhz+" kHz"),
+    S("Bit Depth",i.bitDepth?i.bitDepth+"-bit":"N/A"),S("Bitrate",i.bitrateKbps?i.bitrateKbps+" kbps":"N/A"),
+    S("Loudness",l.integrated!==null?l.integrated.toFixed(1)+" LUFS":"N/A"),
+    S("True Peak",l.truePeak!==null?l.truePeak.toFixed(1)+" dBFS":"N/A")
+  ].join("");
+  setDefaults();renderVal();
+}
+function S(l,v){return`<div class="stat"><div class="lbl">${l}</div><div class="val">${v}</div></div>`}
+
+function pickWf(w){
+  WF=w;
+  document.querySelectorAll(".wf-pill").forEach(e=>e.classList.toggle("sel",e.dataset.wf===w));
+  setDefaults();renderVal();
+}
+
+function setDefaults(){
+  const f=document.getElementById("xFmt"),bd=document.getElementById("bdWrap"),br=document.getElementById("brWrap");
+  if(WF==="connect"){f.value="wav";bd.classList.remove("hidden");br.classList.add("hidden")}
+  else{f.value="aac";bd.classList.add("hidden");br.classList.remove("hidden")}
+  fmtChanged();
+}
+
+function fmtChanged(){
+  const v=document.getElementById("xFmt").value;
+  const bd=document.getElementById("bdWrap"),br=document.getElementById("brWrap"),ch=document.getElementById("xCh");
+  if(v==="wav"||v==="flac"){bd.classList.remove("hidden");br.classList.add("hidden");ch.value="2";ch.disabled=true}
+  else{bd.classList.add("hidden");br.classList.remove("hidden");ch.disabled=false}
+}
+
+function renderVal(){
+  const v=DATA.validation[WF];
+  renderInto(v,"banner","valList");
+}
+
+function renderInto(v,bId,lId){
+  const b=document.getElementById(bId),c=document.getElementById(lId);
+  const ic={pass:"✅",warning:"⚠️",fail:"❌"};
+  const lb={pass:"All Checks Passed",warning:"Warnings Found — Review Recommended",fail:"Issues Found — Fixes Needed"};
+  b.className="banner "+v.overall;
+  b.innerHTML=lb[v.overall]+`<div class="sub">${v.summary.pass} passed · ${v.summary.warning} warnings · ${v.summary.fail} failed</div>`;
+  c.innerHTML=v.checks.map(r=>`<div class="vr ${r.status}"><span class="ico">${ic[r.status]}</span><div><div class="cat">${r.category}</div><div class="msg">${r.message}</div>${r.fix?`<div class="fix">💡 ${r.fix}</div>`:""}</div></div>`).join("");
+}
+
+async function doConvert(){
+  const btn=document.getElementById("goBtn");btn.disabled=true;btn.textContent="Processing…";
+  show("load");step(4);document.getElementById("loadTxt").textContent="Converting & optimizing audio…";
+  const opts={
+    workflow:WF,
+    format:document.getElementById("xFmt").value,
+    sampleRate:+document.getElementById("xSr").value,
+    bitDepth:+document.getElementById("xBd").value,
+    bitrate:+document.getElementById("xBr").value,
+    channels:+document.getElementById("xCh").value,
+    normalize:document.getElementById("xNorm").checked
+  };
+  try{
+    const r=await fetch("/api/convert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({storedName:STORED,options:opts})});
+    if(!r.ok)throw new Error((await r.json()).error||"Conversion failed");
+    const d=await r.json();showDl(d);
+  }catch(e){alert("Error: "+e.message);show("results");step(3)}
+  finally{btn.disabled=false;btn.textContent="Convert & Export"}
+}
+
+function showDl(d){
+  show("dl");step(5);
+  const i=d.info;
+  document.getElementById("dlName").textContent=d.outName;
+  document.getElementById("dlInfo").textContent=`${d.fileSizeFmt} · ${i.sampleRateKhz} kHz · ${i.channels===1?"Mono":"Stereo"}`;
+  const a=document.getElementById("dlLink");a.href=d.downloadUrl;
+  if(d.validation)renderInto(d.validation,"dlBanner","dlVal");
+}
+
+function show(s){["upload","load","results","dl"].forEach(x=>document.getElementById("sec-"+x).classList.toggle("hidden",x!==s))}
+function step(n){for(let i=1;i<=5;i++){const e=document.getElementById("s"+i);e.classList.remove("active","done");if(i<n)e.classList.add("done");else if(i===n)e.classList.add("active")}}
+function reset(){DATA=null;WF="connect";STORED="";fileIn.value="";show("upload");step(1);document.querySelectorAll(".wf-pill").forEach(e=>e.classList.toggle("sel",e.dataset.wf==="connect"))}
+</script>
+</body>
+</html>

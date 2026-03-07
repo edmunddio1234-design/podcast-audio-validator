@@ -1,0 +1,13 @@
+{
+  "name": "podcast-audio-validator",
+  "version": "2.0.0",
+  "description": "Apple Podcasts audio validator by Mission Metrics",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18.0.0" },
+  "dependencies": {
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "music-metadata": "^10.6.4"
+  }
+}
