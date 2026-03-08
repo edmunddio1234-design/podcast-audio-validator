@@ -263,9 +263,27 @@ setInterval(() => {
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/files", express.static(CONVERT_DIR));
 
+// ── No-cache for HTML (prevent stale frontend) ──
+app.use((req, res, next) => {
+  if (req.path === "/" || req.path.endsWith(".html")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+  }
+  next();
+});
+
 // ── API: Health ──
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", ffmpeg: FFMPEG, ffprobe: FFPROBE, uptime: process.uptime(), activeJobs: jobs.size });
+});
+
+// ── API: Debug — list all jobs ──
+app.get("/api/debug/jobs", (req, res) => {
+  const list = [];
+  for (const [id, job] of jobs) {
+    list.push({ id: id.slice(0, 8), status: job.status, progress: job.progress, error: job.error, age: Math.round((Date.now() - job.created) / 1000) + "s" });
+  }
+  res.json({ jobs: list, count: list.length });
 });
 
 // ── API: Analyze (unchanged — works within timeout for most files) ──
