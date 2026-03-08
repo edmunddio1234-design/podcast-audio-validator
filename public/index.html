@@ -302,7 +302,8 @@ async function doConvert(){
   const loadTxt=document.getElementById("loadTxt");
   loadTxt.textContent="Converting & optimizing audio…";
   let dots=0;
-  const dotTimer=setInterval(()=>{dots=(dots+1)%4;loadTxt.textContent=`Converting & optimizing audio${'.'.repeat(dots)}`},800);
+  const phases=["Converting & optimizing audio","Converting & optimizing audio","Converting & optimizing audio"];
+  const dotTimer=setInterval(()=>{dots=(dots+1)%4;loadTxt.textContent=`${phases[0]}${'.'.repeat(dots)}`},800);
   const opts={
     workflow:WF,
     format:document.getElementById("xFmt").value,
@@ -313,20 +314,41 @@ async function doConvert(){
     normalize:document.getElementById("xNorm").checked
   };
   try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),300000); // 5 min max for conversion
-    const r=await fetch("/api/convert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({storedName:STORED,options:opts}),signal:controller.signal});
-    clearTimeout(timeout);
+    // Step 1: Start the conversion job (returns instantly with jobId)
+    const r=await fetch("/api/convert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({storedName:STORED,options:opts})});
     if(!r.ok){
       let msg="Conversion failed";
       try{const j=await r.json();msg=j.error||msg}catch(_){msg=`Server error (${r.status})`}
       throw new Error(msg);
     }
-    const d=await r.json();clearInterval(dotTimer);showDl(d);
+    const {jobId}=await r.json();
+    if(!jobId)throw new Error("Server did not return a job ID");
+
+    // Step 2: Poll for completion every 2 seconds
+    const MAX_POLL=300; // 10 minutes max (300 * 2s)
+    let polls=0;
+    const result=await new Promise((resolve,reject)=>{
+      const poll=async()=>{
+        polls++;
+        if(polls>MAX_POLL){reject(new Error("Conversion timed out after 10 minutes. Try a shorter file."));return}
+        try{
+          const pr=await fetch(`/api/job/${jobId}`);
+          if(!pr.ok){reject(new Error(`Poll failed (${pr.status})`));return}
+          const data=await pr.json();
+          if(data.status==="done"){resolve(data.result);return}
+          if(data.status==="error"){reject(new Error(data.error||"Conversion failed"));return}
+          // Still processing — update progress text
+          if(data.progress)phases[0]=data.progress;
+          setTimeout(poll,2000);
+        }catch(e){reject(e)}
+      };
+      poll();
+    });
+
+    clearInterval(dotTimer);showDl(result);
   }catch(e){
     clearInterval(dotTimer);
-    const msg=e.name==='AbortError'?'Conversion timed out. Try a shorter file or lower quality settings.':e.message;
-    alert("Error: "+msg);show("results");step(3);
+    alert("Error: "+e.message);show("results");step(3);
   }
   finally{btn.disabled=false;btn.textContent="Convert & Export"}
 }
