@@ -187,7 +187,7 @@ function validate(info, loudness, workflow) {
   return { checks, summary: { pass: passes, warning: warns, fail: fails }, overall: fails > 0 ? "fail" : warns > 0 ? "warning" : "pass" };
 }
 
-// ── Convert ──
+// ── Convert (using spawn to avoid buffer issues with large files) ──
 async function convert(inputPath, opts) {
   const id = crypto.randomUUID();
   const ext = opts.format === "aac" ? "m4a" : opts.format;
@@ -217,8 +217,30 @@ async function convert(inputPath, opts) {
   }
 
   args.push(outPath);
-  await run(FFMPEG, args);
+  console.log(`[convert] Running: ffmpeg ${args.join(" ")}`);
+
+  // Use spawn instead of execFile to avoid buffer overflow on large files
+  const { spawn: sp } = require("child_process");
+  await new Promise((resolve, reject) => {
+    const proc = sp(FFMPEG, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let lastErr = "";
+    const CONVERT_TIMEOUT = 600000; // 10 minutes max
+    const timer = setTimeout(() => {
+      console.error("[convert] Timeout reached (10 min), killing");
+      proc.kill("SIGKILL");
+      reject(new Error("Conversion timed out. Try a shorter file."));
+    }, CONVERT_TIMEOUT);
+    proc.stderr.on("data", chunk => { lastErr = chunk.toString().slice(-500); }); // keep only last 500 chars
+    proc.on("close", code => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited with code ${code}: ${lastErr.trim()}`));
+    });
+    proc.on("error", err => { clearTimeout(timer); reject(err); });
+  });
+
   const stat = fs.statSync(outPath);
+  console.log(`[convert] Done: ${outName} (${fmtSize(stat.size)})`);
   return { outName, outPath, downloadUrl: `/files/${outName}`, fileSize: stat.size, fileSizeFmt: fmtSize(stat.size) };
 }
 
@@ -272,18 +294,24 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
 app.post("/api/convert", async (req, res) => {
   try {
     const { storedName, options } = req.body;
+    console.log(`[convert] Request: storedName=${storedName}, format=${options.format}, normalize=${options.normalize}`);
     const inputPath = path.join(UPLOAD_DIR, storedName);
     if (!fs.existsSync(inputPath)) return res.status(404).json({ error: "File not found. Please re-upload." });
+    console.log("[convert] Starting conversion...");
     const result = await convert(inputPath, options);
+    console.log("[convert] Conversion complete, re-analyzing output...");
     // Re-analyze output
     const info = await analyze(result.outPath);
     info.ext = options.format === "aac" ? "m4a" : options.format;
+    console.log("[convert] Running loudness on converted file...");
     const loudness = await measureLoudness(result.outPath);
+    console.log(`[convert] Post-conversion loudness: ${JSON.stringify(loudness)}`);
     const wf = options.workflow || "connect";
     const val = validate(info, loudness, wf);
+    console.log("[convert] Sending response");
     res.json({ ...result, info, loudness, validation: val });
   } catch (err) {
-    console.error(err);
+    console.error("[convert] ERROR:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
