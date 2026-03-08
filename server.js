@@ -32,11 +32,14 @@ function which(name) {
 }
 const FFMPEG = which("ffmpeg");
 const FFPROBE = which("ffprobe");
+console.log(`[init] FFMPEG path: ${FFMPEG}`);
+console.log(`[init] FFPROBE path: ${FFPROBE}`);
 
-// ── Run a command as promise ──
+// ── Run a command as promise (with configurable timeout) ──
 function run(cmd, args, opts = {}) {
+  const timeout = opts.timeout || 120000; // default 2 min
   return new Promise((resolve, reject) => {
-    const proc = execFile(cmd, args, { maxBuffer: 50 * 1024 * 1024, timeout: 300000, ...opts }, (err, stdout, stderr) => {
+    const proc = execFile(cmd, args, { maxBuffer: 50 * 1024 * 1024, timeout, ...opts }, (err, stdout, stderr) => {
       if (err) return reject(new Error(stderr || err.message));
       resolve({ stdout, stderr });
     });
@@ -65,28 +68,38 @@ async function analyze(filePath) {
 
 // ── Loudness analysis with ffmpeg ebur128 (using spawn for full stderr capture) ──
 async function measureLoudness(filePath) {
+  const LOUDNESS_TIMEOUT = 60000; // 60 seconds max
   try {
+    console.log(`[loudness] Starting analysis for ${path.basename(filePath)}`);
     const { spawn: sp } = require("child_process");
     const args = ["-i", filePath, "-af", "ebur128=peak=true", "-f", "null", "-"];
-    const txt = await new Promise((resolve) => {
+    const txt = await new Promise((resolve, reject) => {
       const proc = sp(FFMPEG, args, { stdio: ["pipe", "pipe", "pipe"] });
       let stderr = "";
+      const timer = setTimeout(() => {
+        console.log("[loudness] Timeout reached, killing process");
+        proc.kill("SIGKILL");
+        resolve(stderr); // resolve with whatever we have
+      }, LOUDNESS_TIMEOUT);
       proc.stderr.on("data", chunk => { stderr += chunk.toString(); });
-      proc.on("close", () => resolve(stderr));
-      proc.on("error", () => resolve(stderr));
+      proc.on("close", () => { clearTimeout(timer); resolve(stderr); });
+      proc.on("error", (err) => { clearTimeout(timer); console.error("[loudness] spawn error:", err.message); resolve(stderr); });
     });
+    console.log(`[loudness] Analysis complete, stderr length: ${txt.length}`);
     // Only parse from the Summary block to avoid duplicate matches from progress lines
     const summaryIdx = txt.lastIndexOf("Summary:");
     const summary = summaryIdx >= 0 ? txt.slice(summaryIdx) : txt;
     const iMatch = summary.match(/I:\s+([-\d.]+)\s+LUFS/);
     const tpMatch = summary.match(/Peak:\s+([-\d.]+)\s+dBFS/);
     const lraMatch = summary.match(/LRA:\s+([-\d.]+)\s+LU/);
+    console.log(`[loudness] Parsed: I=${iMatch?.[1]}, TP=${tpMatch?.[1]}, LRA=${lraMatch?.[1]}`);
     return {
       integrated: iMatch ? parseFloat(iMatch[1]) : null,
       truePeak: tpMatch ? parseFloat(tpMatch[1]) : null,
       lra: lraMatch ? parseFloat(lraMatch[1]) : null
     };
-  } catch {
+  } catch (err) {
+    console.error("[loudness] Error:", err.message);
     return { integrated: null, truePeak: null, lra: null };
   }
 }
@@ -224,22 +237,33 @@ function fmtSize(b) {
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/files", express.static(CONVERT_DIR));
 
+// ── API: Health / Debug ──
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", ffmpeg: FFMPEG, ffprobe: FFPROBE, uptime: process.uptime() });
+});
+
 // ── API: Analyze ──
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   try {
+    console.log(`[analyze] File received: ${req.file.originalname} (${(req.file.size / 1024).toFixed(0)} KB)`);
     const ext = path.extname(req.file.originalname).toLowerCase().replace(".", "");
+    console.log("[analyze] Running ffprobe...");
     const info = await analyze(req.file.path);
+    console.log(`[analyze] ffprobe done: codec=${info.codec}, sr=${info.sampleRate}, ch=${info.channels}`);
     info.ext = ext;
     info.originalName = req.file.originalname;
     info.storedName = req.file.filename;
     info.fileSizeFmt = fmtSize(info.fileSize || fs.statSync(req.file.path).size);
+    console.log("[analyze] Running loudness measurement...");
     const loudness = await measureLoudness(req.file.path);
+    console.log(`[analyze] Loudness done: ${JSON.stringify(loudness)}`);
     const connectVal = validate(info, loudness, "connect");
     const rssVal = validate(info, loudness, "rss");
+    console.log("[analyze] Sending response");
     res.json({ info, loudness, validation: { connect: connectVal, rss: rssVal } });
   } catch (err) {
-    console.error(err);
+    console.error("[analyze] ERROR:", err.message, err.stack);
     res.status(500).json({ error: err.message });
   }
 });
@@ -277,5 +301,7 @@ try {
 }
 app.listen(PORT, () => {
   console.log(`\n🎙️  Podcast Audio Validator running → http://localhost:${PORT}`);
+  console.log(`   ffmpeg: ${FFMPEG}`);
+  console.log(`   ffprobe: ${FFPROBE}`);
   console.log("   Open this URL in your browser to get started.\n");
 });
