@@ -221,14 +221,30 @@ fileIn.onchange=()=>{if(fileIn.files.length)go(fileIn.files[0])};
 
 async function go(file){
   show("load");step(2);
-  document.getElementById("loadTxt").textContent=`Analyzing ${file.name}… measuring loudness…`;
+  const loadTxt=document.getElementById("loadTxt");
+  loadTxt.textContent=`Uploading ${file.name}…`;
   const fd=new FormData();fd.append("audio",file);
+  // Progress indicator
+  let dots=0;
+  const dotTimer=setInterval(()=>{dots=(dots+1)%4;loadTxt.textContent=`Analyzing ${file.name}${'.'.repeat(dots)} measuring loudness…`},800);
   try{
-    const r=await fetch("/api/analyze",{method:"POST",body:fd});
-    if(!r.ok)throw new Error((await r.json()).error||"Upload failed");
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),180000); // 3 min max
+    const r=await fetch("/api/analyze",{method:"POST",body:fd,signal:controller.signal});
+    clearTimeout(timeout);
+    if(!r.ok){
+      let msg="Upload failed";
+      try{const j=await r.json();msg=j.error||msg}catch(_){msg=`Server error (${r.status})`}
+      throw new Error(msg);
+    }
     DATA=await r.json();DATA.info.originalName=file.name;STORED=DATA.info.storedName;
+    clearInterval(dotTimer);
     showResults();
-  }catch(e){alert("Error: "+e.message);show("upload");step(1)}
+  }catch(e){
+    clearInterval(dotTimer);
+    const msg=e.name==='AbortError'?'Request timed out. Try a smaller file or try again.':e.message;
+    alert("Error: "+msg);show("upload");step(1);
+  }
 }
 
 function showResults(){
@@ -282,7 +298,11 @@ function renderInto(v,bId,lId){
 
 async function doConvert(){
   const btn=document.getElementById("goBtn");btn.disabled=true;btn.textContent="Processing…";
-  show("load");step(4);document.getElementById("loadTxt").textContent="Converting & optimizing audio…";
+  show("load");step(4);
+  const loadTxt=document.getElementById("loadTxt");
+  loadTxt.textContent="Converting & optimizing audio…";
+  let dots=0;
+  const dotTimer=setInterval(()=>{dots=(dots+1)%4;loadTxt.textContent=`Converting & optimizing audio${'.'.repeat(dots)}`},800);
   const opts={
     workflow:WF,
     format:document.getElementById("xFmt").value,
@@ -293,10 +313,21 @@ async function doConvert(){
     normalize:document.getElementById("xNorm").checked
   };
   try{
-    const r=await fetch("/api/convert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({storedName:STORED,options:opts})});
-    if(!r.ok)throw new Error((await r.json()).error||"Conversion failed");
-    const d=await r.json();showDl(d);
-  }catch(e){alert("Error: "+e.message);show("results");step(3)}
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),300000); // 5 min max for conversion
+    const r=await fetch("/api/convert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({storedName:STORED,options:opts}),signal:controller.signal});
+    clearTimeout(timeout);
+    if(!r.ok){
+      let msg="Conversion failed";
+      try{const j=await r.json();msg=j.error||msg}catch(_){msg=`Server error (${r.status})`}
+      throw new Error(msg);
+    }
+    const d=await r.json();clearInterval(dotTimer);showDl(d);
+  }catch(e){
+    clearInterval(dotTimer);
+    const msg=e.name==='AbortError'?'Conversion timed out. Try a shorter file or lower quality settings.':e.message;
+    alert("Error: "+msg);show("results");step(3);
+  }
   finally{btn.disabled=false;btn.textContent="Convert & Export"}
 }
 
